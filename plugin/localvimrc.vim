@@ -1,5 +1,5 @@
 " Name:    localvimrc.vim
-" Version: 3.0.1
+" Version: 3.1.0
 " Author:  Markus Braun <markus.braun@krawel.de>
 " Summary: Vim plugin to search local vimrc files and load them.
 " Licence: This program is free software: you can redistribute it and/or modify
@@ -205,16 +205,27 @@ function! s:LocalVimRCSourceScript(script_path, sandbox)
     let l:command = "sandbox " . l:command
   endif
 
-  " prevent nested sourcing possibly triggered by content of sourced script by
-  " setting a guard variable
-  let s:localvimrc_running = 1
+  try
+    " prevent nested sourcing possibly triggered by content of sourced script by
+    " setting a guard variable
+    let s:localvimrc_running = 1
 
-  " execute the command sourcing the local vimrc file
-  call s:LocalVimRCDebug(1, "sourcing script, command is: \"" . l:command . "\"")
-  exec l:command
-
-  " release the guard variable
-  let s:localvimrc_running = 0
+    " execute the command sourcing the local vimrc file
+    call s:LocalVimRCDebug(1, "sourcing script, command is: \"" . l:command . "\"")
+    exec l:command
+  catch /^Vim\%((\a\+)\)\=:E48:/
+    " catch sandbox exception and throw special "sandbox" exception that
+    " is handled by calling function
+    call s:LocalVimRCDebug(1, "sandbox error when sourcing script: \"" . v:exception . "\" (" . v:throwpoint . ")")
+    throw "sandbox"
+  catch
+    " catch all other errors to prevent bad behavior when sourced script
+    " contains a syntax error.
+    call s:LocalVimRCError("error when sourcing script: \"" . v:exception . "\" (" . v:throwpoint . ")")
+  finally
+    " release the guard variable
+    let s:localvimrc_running = 0
+  endtry
 endf
 
 " Function: s:LocalVimRC() 
@@ -494,8 +505,8 @@ function! s:LocalVimRC(event)
           try
             " execute the command
             call s:LocalVimRCSourceScript(l:rcfile, 1)
-          catch ^Vim\%((\a\+)\)\=:E48
-            let l:message = printf("unable to use sandbox on '%s': %s (%s)", l:rcfile, v:exception, v:throwpoint)
+          catch /^sandbox$/
+            let l:message = "localvimrc: unable to use sandbox for \"" . l:rcfile . "\"."
             call s:LocalVimRCDebug(1, l:message)
 
             if (s:localvimrc_ask == 1)
@@ -508,11 +519,11 @@ function! s:LocalVimRC(event)
                   let l:sandbox_answer = ""
                   while (l:sandbox_answer !~? '^[ynaq]$')
                     if (s:localvimrc_persistent == 0)
-                      let l:message .= ".\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit) "
+                      let l:message .= "\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit) "
                     elseif (s:localvimrc_persistent == 1)
-                      let l:message .= ".\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit ; persistent [Y]es/[N]o/[A]ll) "
+                      let l:message .= "\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit ; persistent [Y]es/[N]o/[A]ll) "
                     else
-                      let l:message .= ".\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit) "
+                      let l:message .= "\nlocalvimrc: Source it anyway? ([y]es/[n]o/[a]ll/[q]uit) "
                     endif
 
                     " turn off possible previous :silent command to force this
@@ -644,9 +655,14 @@ endfunction
 "
 function! s:LocalVimRCMatchAny(str, patterns)
   for l:pattern in a:patterns
-    if (match(a:str, l:pattern) != -1)
-      return 1
-    endif
+    try
+      if (match(a:str, l:pattern) != -1)
+        return 1
+      endif
+    catch
+      " the given patterns contain an illegal regular expression
+      call s:LocalVimRCError("localvimrc_whitelist or localvimrc_blacklist contains illegal regular expression '" . l:pattern . "'")
+    endtry
   endfor
   return 0
 endfunction
@@ -730,7 +746,6 @@ function! s:LocalVimRCReadPersistent()
         for l:line in l:serialized
           let l:columns = split(l:line, '[^\\]\zs|\|^|', 1)
           if len(l:columns) != 3 && len(l:columns) != 4
-            call s:LocalVimRCDebug(1, "error in persistence file")
             call s:LocalVimRCError("error in persistence file")
           else
             if len(l:columns) == 3
@@ -985,6 +1000,9 @@ endfunction
 "
 function! s:LocalVimRCError(text)
   echohl ErrorMsg | echom "localvimrc: " . a:text | echohl None
+
+  " put every error message to the debug message array
+  call s:LocalVimRCDebug(0, a:text)
 endfunction
 
 " Function: s:LocalVimRCDebug(level, text) 
@@ -1004,12 +1022,24 @@ endfunction
 
 " Function: s:LocalVimRCDebugShow() 
 "
-" output stored debug message
+" output stored debug messages to console
 "
 function! s:LocalVimRCDebugShow()
+  redir! > /tmp/localvimrc.log
+
   for l:message in s:localvimrc_debug_message
     echo l:message
   endfor
+
+  redir END
+endfunction
+
+" Function: s:LocalVimRCDebugDump(logfile) {{{2
+"
+" output stored debug message to file
+"
+function! s:LocalVimRCDebugDump(logfile)
+  call writefile(s:localvimrc_debug_message, a:logfile, "s")
 endfunction
 
 " Section: Initialize internal variables 
@@ -1117,5 +1147,6 @@ command! LocalVimRCEdit    call s:LocalVimRCEdit()
 command! LocalVimRCEnable  call s:LocalVimRCEnable()
 command! LocalVimRCDisable call s:LocalVimRCDisable()
 command! LocalVimRCDebugShow call s:LocalVimRCDebugShow()
+command! -nargs=+ -complete=file LocalVimRCDebugDump call s:LocalVimRCDebugDump(<f-args>)
 
 " vim600: foldmethod=marker foldlevel=0 :

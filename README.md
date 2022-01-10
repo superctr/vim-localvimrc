@@ -14,7 +14,7 @@ previous loading.
 It is possible to define a whitelist and a blacklist of local vimrc files that
 are loaded or ignored unconditionally.
 
-The plugin can be found on [Bitbucket], [GitHub] and [VIM online].
+The plugin can be found on [GitHub] and [VIM online].
 
 ## Commands
 
@@ -64,6 +64,13 @@ startup.
 Show all stored debugging messages. To see any message with this command
 debugging needs to be enabled with |g:localvimrc_debug|. The number of messages
 stored and printed can be limited using the setting |g:localvimrc_debug_lines|.
+
+### The `LocalVimRCDebugDump` command
+
+Write all stored debugging messages to given file. To write any message with
+this command debugging needs to be enabled with |g:localvimrc_debug|. The
+number of messages stored and written can be limited using the setting
+|g:localvimrc_debug_lines|.
 
 ## Functions
 
@@ -209,6 +216,15 @@ setlocal colorcolumn=+1
 
 in the local vimrc file. Settings "local to window" need to be set for every
 time a buffer is displayed in a window.
+
+Because the plugin searches local vimrc files in the path of the currently
+opened file not all autocommand events make sense. For example the event
+|VimEnter| might cause problems. When that event is emitted it is possible that
+no file is opened but some temporary buffer is currently shown. This will lead
+to an unexpected behavior. If you would like to apply settings only once per
+running Vim instance please use |g:localvimrc_sourced_once_for_file| and
+|g:localvimrc_sourced_once|. An example how to use those variables in a local
+vimrc file is described in the introduction to |localvimrc-variables|.
 
 ------------------------------------------------------------
 
@@ -359,14 +375,14 @@ vimrc file checksums, in case |sha256()| is not available.
 ### The `g:localvimrc_debug` setting
 
 Debug level for this script. The messages can be shown with
-|LocalVimRCDebugShow|.
+|LocalVimRCDebugShow| or written to a file with |LocalVimRCDebugDump|.
 
   - Default: `0`
 
 ### The `g:localvimrc_debug_lines` setting
 
 Limit for the number of debug messages stored. The messages can be shown with
-|LocalVimRCDebugShow|.
+|LocalVimRCDebugShow| or written to a file with |LocalVimRCDebugDump|.
 
   - Default: `100`
 
@@ -418,16 +434,16 @@ endif
 
 To contact the author (Markus Braun), please send an email to <markus.braun@krawel.de>
 
-If you think this plugin could be improved, fork on [Bitbucket] or [GitHub] and
-send a pull request or just tell me your ideas.
+If you think this plugin could be improved, fork on [GitHub] and send a pull
+request or just tell me your ideas.
 
 If you encounter a bug please enable debugging, export debugging messages to
-a file and create a bug report either on [Bitbucket] or [GitHub]. Debug
-messages can be enabled temporary and exported to a file called
-`localvimrc_debug.txt` on command line with the following command:
+a file and create a bug report on [GitHub]. Debug messages can be enabled
+temporary and exported to a file called `localvimrc_debug.txt` on command line
+with the following command:
 
 ``` {.sh}
-vim --cmd "let g:localvimrc_debug=99" -c "redir! > localvimrc_debug.txt" -c "LocalVimRCDebugShow" -c "redir END" your_file
+vim --cmd "let g:localvimrc_debug=99" -c "LocalVimRCDebugDump localvimrc_debug.txt" your_file
 ```
 
 ## Credits
@@ -444,7 +460,13 @@ vim --cmd "let g:localvimrc_debug=99" -c "redir! > localvimrc_debug.txt" -c "Loc
 
 vX.X.X : XXXX-XX-XX
 
+  - add command |LocalVimRCDebugDump| to write debug messages to a file.
+  
+v3.1.0 : 2020-05-20
+
+  - add option to disable probing of Python versions
   - prevent recursive sourcing of local vimrc files
+  - better handling of syntax errors in sourced local vimrc files
 
 v3.0.1 : 2018-08-21
 
@@ -531,6 +553,5 @@ v1.2 : 2002-10-09
   - initial version
 
 
-[Bitbucket]: https://bitbucket.org/embear/localvimrc
 [GitHub]: https://github.com/embear/vim-localvimrc
 [VIM online]: http://www.vim.org/scripts/script.php?script_id=441
